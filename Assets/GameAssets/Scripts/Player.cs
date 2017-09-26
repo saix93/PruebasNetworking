@@ -3,28 +3,30 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class Player : NetworkBehaviour {
+public class Player : Food {
 
     [SyncVar(hook = "OnNameChanged")]
     string playerName;
 
     [SyncVar(hook = "OnColorChanged")]
     Color playerColor;
-
-    [SyncVar(hook = "OnRadioChanged")]
-    float playerRadio = 0.5f;
-    
+        
     Vector2 _lastDirection;
     Rigidbody2D _rigidbody;
-
-    float GetArea()
-    {
-        return Mathf.PI * playerRadio * playerRadio;
-    }
 
     private void Awake()
     {
         _rigidbody = GetComponent<Rigidbody2D>();
+    }
+
+    public void SetPlayerName(string name)
+    {
+        this.playerName = name;
+    }
+
+    public void SetPlayerColor(Color color)
+    {
+        this.playerColor = color;
     }
 
     public override void OnStartServer()
@@ -36,27 +38,25 @@ public class Player : NetworkBehaviour {
 
     public override void OnStartClient()
     {        
-        base.OnStartClient();
-        if (!isLocalPlayer) { 
-            this.name = playerName;
-            this.GetComponentInChildren<Renderer>().material.color = playerColor;
-        }
+        base.OnStartClient();        
+        this.name = playerName;
+        this.GetComponentInChildren<Renderer>().material.color = playerColor;        
         OnRadioChanged(playerRadio);
     }
-
-    public override void OnStartLocalPlayer()
+    
+    public override void OnNetworkDestroy()
     {
-        base.OnStartLocalPlayer();
-
-        this.name = "Raúl T.";
-        this.GetComponentInChildren<Renderer>().material.color = Color.yellow;
-
-        CmdChangeName("Raúl T.");
-        CmdChangeColor(Color.green);
+        base.OnNetworkDestroy();
+        if (isLocalPlayer)
+        {
+            FindObjectOfType<GameCanvas>().ActivateLosePanel();
+        }
     }
 
-    private void Update()
-    {      
+    protected override void Update()
+    {
+        base.Update();
+
         if(isLocalPlayer)
         {
             float horizontal = Input.GetAxis("Horizontal");
@@ -70,13 +70,16 @@ public class Player : NetworkBehaviour {
                 _rigidbody.velocity = direction.normalized * 15;                
             }
         }
+
+
     }
 
     private void OnTriggerStay2D(Collider2D collision)
     {
+        Debug.Log("OnTriggerStay with " + collision.name);
         if (isServer)
         {
-            Player enemy = collision.attachedRigidbody.GetComponent<Player>();
+            Food enemy = collision.attachedRigidbody.GetComponent<Food>();
             if (this.playerRadio > enemy.playerRadio)
             {
                 float distance = Vector3.Distance(this.transform.position, enemy.transform.position);
@@ -107,24 +110,24 @@ public class Player : NetworkBehaviour {
         GetComponentInChildren<Renderer>().material.color = color;
     }
 
-    void OnRadioChanged(float radio)
+    public void Victory()
     {
-        this.transform.localScale = 2 * radio * Vector3.one;
+        RpcVictory();
     }
 
-    [Command]
-    void CmdChangeName(string name)
+    [ClientRpc]
+    void RpcVictory()
     {
-        this.gameObject.name = name;
-        playerName = name;
+        if (isLocalPlayer)
+        {
+            FindObjectOfType<GameCanvas>().ActivateVictoryPanel();
+            FindObjectOfType<GameCanvas>().SetVictoryMessage("¡Felicidades " + this.name + ", has ganado!");
+        }
+        else
+        {
+            FindObjectOfType<GameCanvas>().SetLoseMessage(this.name + " ha ganado");
+        }
     }
-
-    [Command]
-    void CmdChangeColor(Color color)
-    {
-        GetComponentInChildren<Renderer>().material.color = color;
-        playerColor = color;
-    }    
 
 
 }
